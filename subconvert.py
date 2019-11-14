@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# subConverter 1.0
+# subconvert 1.0
 
 import os
 import sys
@@ -64,7 +64,7 @@ def convertEBU(subtitles):
 # --------------------------------------------------------------------------- #
 def main(args):
     if len(args) == 1 or not os.path.isfile(args[1]):
-        print("Usage: subConvert.py XMLSUB")
+        print("Usage: subconvert.py XMLSUB")
 
     with open(args[1], 'r') as f:
         raw = f.read()

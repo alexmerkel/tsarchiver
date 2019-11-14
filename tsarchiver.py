@@ -12,7 +12,7 @@ import sqlite3
 import pytz
 from bs4 import BeautifulSoup
 import requests
-import subConvert
+import subconvert
 
 # --------------------------------------------------------------------------- #
 # Archive a news site
@@ -155,7 +155,7 @@ def saveShow(show, date, timestamp, localtime, metadate, desc, directory, articl
         subtitleURL = "https://www.tagesschau.de" + media["_subtitleUrl"]
         r = requests.get(subtitleURL)
         rawSubs = r.text
-        [subtitles, transcript] = subConvert.convertEBU(rawSubs)
+        [subtitles, transcript] = subconvert.convertEBU(rawSubs)
         #Extract presenter
         info["presenter"] = subtitles[:3000].split("Studio:", 1)[1].split('<', 1)[0].strip()
     except KeyError:
