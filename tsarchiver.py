@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# tsarchiver 0.1
+# tsarchiver 1.0
 
 import os
 import sys
@@ -12,6 +12,7 @@ import sqlite3
 import pytz
 from bs4 import BeautifulSoup
 import requests
+import subConvert
 
 # --------------------------------------------------------------------------- #
 # Archive a news site
@@ -154,7 +155,7 @@ def saveShow(show, date, timestamp, localtime, metadate, desc, directory, articl
         subtitleURL = "https://www.tagesschau.de" + media["_subtitleUrl"]
         r = requests.get(subtitleURL)
         rawSubs = r.text
-        [subtitles, transcript] = convertSubtitles(rawSubs)
+        [subtitles, transcript] = subConvert.convertEBU(rawSubs)
         #Extract presenter
         info["presenter"] = subtitles[:3000].split("Studio:", 1)[1].split('<', 1)[0].strip()
     except KeyError:
@@ -330,48 +331,6 @@ def convertDate(dateString):
     return [date, timestamp, localtime, metadate]
 # ########################################################################### #
 
-# --------------------------------------------------------------------------- #
-def convertSubtitles(subtitles):
-    trans = ""
-    srt = ""
-    counter = 0
-    colors = {}
-    ebutt = BeautifulSoup(subtitles, "xml")
-    #Get colors
-    for style in ebutt.find("tt:styling").find_all("tt:style"):
-        if "tts:color" in style.attrs:
-            colors[style.attrs["xml:id"]] = style.attrs["tts:color"]
-    #Loop through
-    for p in ebutt.find("tt:div").find_all("tt:p"):
-        text = ""
-        textRaw = ""
-        #Get begin and end times
-        attrs = p.attrs
-        begin = attrs["begin"].replace('.', ',')
-        if not begin.startswith("0"):
-            begin = '0' + begin[1:]
-        end = attrs["end"].replace('.', ',')
-        if not end.startswith("0"):
-            end = '0' + begin[1:]
-        items = p.findChildren()
-        for item in items:
-            if item.name == "span":
-                if ("Untertitelung des NDR" in item.text) or ("Copyright Untertitel" in item.text):
-                    text = ""
-                    textRaw = ""
-                    break
-                text += "<font color=\"{}\">{}</font>".format(colors[item.attrs["style"]], item.text)
-                textRaw += item.text
-            elif item.name == "br":
-                text += "\n"
-                textRaw += "\n"
-        if text:
-            counter += 1
-            srt += "{}\n{} --> {}\n{}\n\n".format(counter, begin, end, text)
-            trans += "{}\n\n".format(textRaw)
-
-    return [srt, trans]
-# ########################################################################### #
 
 # --------------------------------------------------------------------------- #
 def connectDB(path):
