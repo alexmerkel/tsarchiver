@@ -23,7 +23,7 @@ Usage:
 ```
 $ subconvert.py SUBFILE
 ```
-where `SUBFILE` is the subtitle file in the EBU-TT-D format with the file extension `.xml`.
+where `SUBFILE` is the subtitle file in the EBU-TT-D (`.xml`) or the WEBVTT (`.xml`) format.
 The script also looks for a file called `subignore.txt` inside the script folder. If a subtitle line contains a word or sentence specified in this file, it will be ignored.
 
 Requirements
