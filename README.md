@@ -29,6 +29,11 @@ The script also looks for a file called `subignore.txt` inside the script folder
 Requirements
 ------------
 
+*   [python3](https://www.python.org/)
+*   [ffmpeg](https://www.ffmpeg.org/)
+*   [exiftool](https://www.sno.phy.queensu.ca/~phil/exiftool/)
+
+Python packages:
 *   [requests](https://pypi.python.org/pypi/requests)
 *   [beautifulsoup4](https://pypi.python.org/pypi/beautifulsoup4)
 *   [lxml](https://pypi.python.org/pypi/lxml)
