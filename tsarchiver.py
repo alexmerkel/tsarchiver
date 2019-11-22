@@ -5,6 +5,8 @@
 import os
 import sys
 import json
+import time
+from zipfile import ZipFile, ZIP_DEFLATED
 from datetime import datetime
 import subprocess
 import shutil
@@ -26,9 +28,21 @@ def archive(argv):
     dbFile = os.path.join(directory, "archive.db")
     if os.path.isfile(dbFile):
         #Database found, connect to it
-        dbCon = connectDB(dbFile)
-        db = dbCon.cursor()
-        last = getLast(db)
+        try:
+            dbCon = connectDB(dbFile)
+            print("Verifying database")
+            if not checkDB(dbCon):
+                print("Database integrity error!")
+                return
+            print("Backing up database")
+            if not backupDB(dbCon, directory):
+                print("Backup failed!")
+                return
+            db = dbCon.cursor()
+            last = getLast(db)
+        except sqlite3.Error as e:
+            print(e)
+            return
     else:
         #No database found, ask to create one
         while True:
@@ -43,8 +57,12 @@ def archive(argv):
             print("Exiting...")
             return
         #Create database
-        dbCon = createDB(dbFile)
-        db = dbCon.cursor()
+        try:
+            dbCon = createDB(dbFile)
+            db = dbCon.cursor()
+        except sqlite3.Error as e:
+            print(e)
+            return
         #Ask for page start indexes
         last = {}
         while True:
@@ -331,16 +349,48 @@ def convertDate(dateString):
     return [date, timestamp, localtime, metadate]
 # ########################################################################### #
 
-
 # --------------------------------------------------------------------------- #
 def connectDB(path):
+    #Connect database
+    dbCon = sqlite3.connect(path)
+    #Return database connection
+    return dbCon
+# ########################################################################### #
+
+# --------------------------------------------------------------------------- #
+def backupDB(con, directory):
+    timestamp = int(time.time())
+    backupDir = os.path.join(directory, "backups")
+    #Create backup dir if it doesn't already exist
     try:
-        #Connect database
-        dbCon = sqlite3.connect(path)
-        #Return database connection
-        return dbCon
-    except sqlite3.Error as e:
-        print(e)
+        os.makedirs(backupDir)
+    except OSError:
+        pass
+    #Create db backup
+    backupPath = os.path.join(backupDir, "{}.db".format(timestamp))
+    bck = sqlite3.connect(backupPath)
+    con.backup(bck)
+    bck.close()
+    #Zip backup
+    with ZipFile(backupPath + ".zip", 'w') as zipf:
+        zipf.write(backupPath, arcname="{}.db".format(timestamp), compress_type=ZIP_DEFLATED)
+    #Verify zip
+    with ZipFile(backupPath + ".zip", 'r') as zipf:
+        if zipf.testzip():
+            return False
+    #Remove uncompressed backup
+    os.remove(backupPath)
+    return True
+# ########################################################################### #
+
+# --------------------------------------------------------------------------- #
+def checkDB(con):
+    r = con.execute("pragma integrity_check;")
+    res = r.fetchall()
+    try:
+        return res[0][0] == "ok"
+    except IndexError:
+        return False
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
@@ -380,22 +430,19 @@ def createDB(path):
                       name TEXT NOT NULL
                   ); """
     conn = None
-    try:
-        #Create database
-        dbCon = connectDB(path)
-        db = dbCon.cursor()
-        #Set encoding
-        db.execute("pragma encoding=UTF8")
-        #Create tables
-        db.execute(videoCmd)
-        db.execute(showCmd)
-        db.execute(presenterCmd)
-        db.execute(subtitleCmd)
-        #Return database connection
-        return dbCon
-    except sqlite3.Error as e:
-        print(e)
-        closeDB(dbCon)
+
+    #Create database
+    dbCon = connectDB(path)
+    db = dbCon.cursor()
+    #Set encoding
+    db.execute("pragma encoding=UTF8")
+    #Create tables
+    db.execute(videoCmd)
+    db.execute(showCmd)
+    db.execute(presenterCmd)
+    db.execute(subtitleCmd)
+    #Return database connection
+    return dbCon
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
