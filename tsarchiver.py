@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-
-# tsarchiver 1.0
+''' tsarchiver - Archive tagesschau, tagesthemen and nachtmagazin '''
 
 import os
 import sys
@@ -17,8 +16,12 @@ import requests
 import subconvert
 
 # --------------------------------------------------------------------------- #
-# Archive a news site
 def archive(argv):
+    '''Archive tagesschau, tagesthemen and nachtmagazin
+
+    :param argv: The command line arguments given by the user
+    :type argv: list
+    '''
     #Get directory
     if len(argv) > 1:
         directory = argv[1]
@@ -92,8 +95,16 @@ def archive(argv):
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
-# Get the info for the new shows and update the last ID
 def getShows(directory, last, db):
+    '''Download the new episodes of all shows
+
+    :param directory: The path of the directory in which to save the shows
+    :type directory: string
+    :param last: The page IDs of the last archived episode for each show
+    :type last: dictionary
+    :param db: Connection to the metadata database
+    :type db: sqlite3.Cursor
+    '''
     #Get Tagesschau
     for i in range(last['ts20']+2, last['ts20']+80, 2):
         url = "https://www.tagesschau.de/multimedia/sendung/ts-{}.html".format(i)
@@ -104,9 +115,8 @@ def getShows(directory, last, db):
         title = page.title.text
         if "20:00" in title:
             dateString = title.split("tagesschau", 1)[1].split("Uhr", 1)[0].strip()
-            [date, timestamp, localtime, metadate] = convertDate(dateString)
             content = page.body.find('div', attrs={'class' : 'inhalt'})
-            saveShow("ts20", date, timestamp, localtime, metadate, content, directory, i, db)
+            saveShow("ts20", dateString, content, directory, i, db)
             last['ts'] = i
     #Get Tagesthemen
     for i in range(last['tt']+2, last['tt']+20, 2):
@@ -117,9 +127,8 @@ def getShows(directory, last, db):
         page = BeautifulSoup(r.text, features="html.parser")
         title = page.title.text
         dateString = title.split("tagesthemen", 1)[1].split("Uhr", 1)[0].strip()
-        [date, timestamp, localtime, metadate] = convertDate(dateString)
         content = page.body.find('div', attrs={'class' : 'inhalt'})
-        saveShow("tt", date, timestamp, localtime, metadate, content, directory, i, db)
+        saveShow("tt", dateString, content, directory, i, db)
         last['tt'] = i
     #Get Nachtmagazin
     for i in range(last['nm']+2, last['nm']+8, 2):
@@ -130,15 +139,28 @@ def getShows(directory, last, db):
         page = BeautifulSoup(r.text, features="html.parser")
         title = page.title.text
         dateString = title.split("nachtmagazin", 1)[1].split("Uhr", 1)[0].strip()
-        [date, timestamp, localtime, metadate] = convertDate(dateString)
         content = page.body.find('div', attrs={'class' : 'inhalt'})
-        saveShow("nm", date, timestamp, localtime, metadate, content, directory, i, db)
+        saveShow("nm", dateString, content, directory, i, db)
         last['nm'] = i
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
-# Download show and parse show info
-def saveShow(show, date, timestamp, localtime, metadate, desc, directory, articleID, db):
+def saveShow(show, dateString, desc, directory, articleID, db):
+    '''Download an episode of a show, parse the metadata and save them to the database
+
+    :param show: identifier of the show (e.g. 'ts20' for main tagesschau)
+    :type show: string
+    :param dateString: Air date and time in the form DD.MM.YYYY HH:MM
+    :type dateString: string
+    :param desc: Episode description
+    :type desc: string
+    :param articleID: Page ID of the episode
+    :type articleID: integer
+    :param db: Connection to the metadata database
+    :type db: sqlite3.Cursor
+    '''
+    #Convert date
+    [date, timestamp, localtime, metadate] = convertDate(dateString)
     #Print status
     print("Get {} from {} ({})".format(show, localtime, articleID))
     #Initialize info json
@@ -199,6 +221,15 @@ def saveShow(show, date, timestamp, localtime, metadate, desc, directory, articl
 
 # --------------------------------------------------------------------------- #
 def writeMetadata(info, videoFile, subtitles):
+    '''Write the metadata into the video file
+
+    :param info: All the metadate for an episode
+    :type info: dictionary
+    :param videoFile: Path of the video file
+    :type videoFile: string
+    :param subtitles: Subtitles in the SRT format
+    :type subtitles: string
+    '''
     #Add subtitles
     if subtitles:
         #Tmp file path
@@ -254,6 +285,19 @@ def writeMetadata(info, videoFile, subtitles):
 
 # --------------------------------------------------------------------------- #
 def saveToDB(db, info, raw, trans, srt):
+    '''Write the metadata to the database
+
+    :param db: Connection to the metadata database
+    :type db: sqlite3.Cursor
+    :param info: All the metadate for an episode
+    :type info: dictionary
+    :param raw: Subtitles in the original format
+    :type raw: string
+    :param trans: Transcript of the video
+    :type trans: string
+    :param srt: Subtitles in the SRT format
+    :type srt: string
+    '''
     try:
         #Check/insert show
         showID = idOrInsert(db, "shows", "name", info["show"])
@@ -286,6 +330,20 @@ def saveToDB(db, info, raw, trans, srt):
 
 # --------------------------------------------------------------------------- #
 def idOrInsert(db, table, item, data):
+    '''Get the ID of an item in the db table and insert it if it doesn't exist yet
+
+    :param db: Connection to the metadata database
+    :type db: sqlite3.Cursor
+    :param table: Database table name
+    :type table: string
+    :param item: Name of the column in which to search
+    :type item: string
+    :param data: Content of the column which to find (or insert)
+    :type data: string
+
+    :returns: ID of the data in the table
+    :rtype: integer
+    '''
     cmd = "SELECT id FROM {} WHERE {} = '{}'".format(table, item, data)
     r = db.execute(cmd).fetchone()
     if not r:
@@ -297,6 +355,14 @@ def idOrInsert(db, table, item, data):
 
 # --------------------------------------------------------------------------- #
 def getLast(db):
+    '''Get the article IDs for the last archived episodes from each show
+
+    :param db: Connection to the metadata database
+    :type db: sqlite3.Cursor
+
+    :returns: Dict with the show identifier as key and the last article ID as value
+    :rtype: dictionary
+    '''
     last = {}
     cmd = "SELECT MAX(articleID) FROM videos INNER JOIN shows ON shows.id = videos.showID WHERE shows.name=?"
     r = db.execute(cmd, ("ts20",)).fetchone()
@@ -338,6 +404,14 @@ def getLast(db):
 
 # --------------------------------------------------------------------------- #
 def convertDate(dateString):
+    '''Convert the date in multiple different formats
+
+    :param dateString: Date and time in the form DD.MM.YYYY HH:MM
+    :type directory: string
+
+    :returns: list with four date formats: [YYYY-MM-DD, TIMESTAMP, YYYY-MM-DD HH:MM, YYYY:MM:DD HH:MM:SS OF:FS]
+    :rtype: list of strings and int
+    '''
     dt = datetime.strptime(dateString, '%d.%m.%Y %H:%M')
     timezone = pytz.timezone("Europe/Berlin")
     timezoneDate = timezone.localize(dt, is_dst=None)
@@ -351,6 +425,16 @@ def convertDate(dateString):
 
 # --------------------------------------------------------------------------- #
 def connectDB(path):
+    '''Connect to a database
+
+    :param path: The path of the database
+    :type path: string
+
+    :raises: :class:``sqlite3.Error: Unable to connect to database
+
+    :returns: Connection to the database
+    :rtype: sqlite3.Connection
+    '''
     #Connect database
     dbCon = sqlite3.connect(path)
     #Return database connection
@@ -359,6 +443,18 @@ def connectDB(path):
 
 # --------------------------------------------------------------------------- #
 def backupDB(con, directory):
+    '''Create a backup copy of the database in the 'backups' subdirectory
+
+    :param con: Connection to the database
+    :type con: sqlite3.Connection
+    :param directory: Path of the directory in which to store the 'backups' subdirectory with the backups
+    :type directory: string
+
+    :raises: :class:``sqlite3.Error: Unable to backup database
+
+    :returns: True if backup successful, otherwise False
+    :rtype: boolean
+    '''
     timestamp = int(time.time())
     backupDir = os.path.join(directory, "backups")
     #Create backup dir if it doesn't already exist
@@ -385,6 +481,16 @@ def backupDB(con, directory):
 
 # --------------------------------------------------------------------------- #
 def checkDB(con):
+    '''Check integrity of database
+
+    :param con: Connection to the database
+    :type con: sqlite3.Connection
+
+    :raises: :class:``sqlite3.Error: Unable to check database
+
+    :returns: True if check passed, otherwise False
+    :rtype: boolean
+    '''
     r = con.execute("pragma integrity_check;")
     res = r.fetchall()
     try:
@@ -395,6 +501,11 @@ def checkDB(con):
 
 # --------------------------------------------------------------------------- #
 def closeDB(dbCon):
+    '''Close the connection to a database
+
+    :param dbCon: Connection to the database
+    :type dbCon: sqlite3.Connection
+    '''
     if dbCon:
         dbCon.commit()
         dbCon.close()
@@ -402,6 +513,14 @@ def closeDB(dbCon):
 
 # --------------------------------------------------------------------------- #
 def createDB(path):
+    '''Create new metadata database with the required tables
+
+    :param path: Path at which to store the new database
+    :type path: string
+
+    :returns: Connection to the newly created database
+    :rtype: sqlite3.Connection
+    '''
     videoCmd = """ CREATE TABLE IF NOT EXISTS videos (
                        id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,
                        datetime TEXT NOT NULL,
@@ -429,7 +548,6 @@ def createDB(path):
                       id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,
                       name TEXT NOT NULL
                   ); """
-    conn = None
 
     #Create database
     dbCon = connectDB(path)

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-
-# subconvert 1.0
+'''subconverter - convert subtitles to the SRT format'''
 
 import os
 import sys
@@ -8,6 +7,14 @@ from bs4 import BeautifulSoup
 
 # --------------------------------------------------------------------------- #
 def parseEBU(subtitles):
+    '''Parse EBU-TT formatted subtitles to intermediate format
+
+    :param subtitles: Subtitles in the EBU-TT format
+    :type subtitles: string
+
+    :returns: Intermediate format
+    :rtype: list of dictionaries
+    '''
     colors = {}
     subs = []
     ebutt = BeautifulSoup(subtitles, "xml")
@@ -45,6 +52,14 @@ def parseEBU(subtitles):
 
 # --------------------------------------------------------------------------- #
 def parseVTT(subtitles):
+    '''Parse WEBVTT formatted subtitles to intermediate format
+
+    :param subtitles: Subtitles in the WEBVTT format
+    :type subtitles: string
+
+    :returns: Intermediate format
+    :rtype: list of dictionaries
+    '''
     subs = []
     lines = []
     begin = ""
@@ -85,6 +100,14 @@ def parseVTT(subtitles):
 
 # --------------------------------------------------------------------------- #
 def generateSrt(subs):
+    '''Generate SRT formatted subtitles from intermediate format
+
+    :param subs: Intermediate format
+    :type subs: list of dictionaries
+
+    :returns: List with the srt subtitles and the transcript as items
+    :rtype: list of string
+    '''
     #Read lines to ingore
     excludeLines = []
     excludeFile = os.path.join(os.path.dirname(os.path.realpath(__file__)), "subignore.txt")
@@ -126,12 +149,25 @@ def generateSrt(subs):
 
 # --------------------------------------------------------------------------- #
 def convertEBU(subtitles):
+    '''Convert subtitle from the EBU-TT to the SRT format
+
+    :param subtitles: EBU-TT formated subtitles
+    :type subtitles: string
+
+    :returns: List with the srt subtitles and the transcript as items
+    :rtype: list of string
+    '''
     subs = parseEBU(subtitles)
     return generateSrt(subs)
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
 def main(args):
+    '''Convert subtitle file to the SRT format
+
+    :param args: The command line arguments given by the user
+    :type args: list
+    '''
     #Read file if one is given, else throw an error
     try:
         with open(args[1], 'r') as f:
