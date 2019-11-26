@@ -10,6 +10,7 @@ from datetime import datetime
 import subprocess
 import shutil
 import sqlite3
+import hashlib
 import pytz
 from bs4 import BeautifulSoup
 import requests
@@ -23,9 +24,15 @@ def archive(argv):
     :type argv: list
     '''
     #Get directory
-    if len(argv) > 1:
-        directory = argv[1]
-    else:
+    try:
+        if argv[1] == '-c':
+            checkFile = True
+            argv.pop(1)
+        else:
+            checkFile = False
+        directory = os.path.normpath(os.path.abspath(argv[1]))
+    except IndexError:
+        checkFile = False
         directory = os.getcwd()
 
     dbFile = os.path.join(directory, "archive.db")
@@ -88,14 +95,14 @@ def archive(argv):
                 print("Invalid input, please enter a number")
 
     #Get shows
-    getShows(directory, last, db)
+    getShows(directory, last, db, checkFile)
 
     #Close db
     closeDB(dbCon)
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
-def getShows(directory, last, db):
+def getShows(directory, last, db, checkFile):
     '''Download the new episodes of all shows
 
     :param directory: The path of the directory in which to save the shows
@@ -104,6 +111,8 @@ def getShows(directory, last, db):
     :type last: dictionary
     :param db: Connection to the metadata database
     :type db: sqlite3.Cursor
+    :param checkFile: Whether to perform an integrity check on the file
+    :type checkFile: boolean
     '''
     #Get Tagesschau
     for i in range(last['ts20']+2, last['ts20']+80, 2):
@@ -116,7 +125,7 @@ def getShows(directory, last, db):
         if "20:00" in title:
             dateString = title.split("tagesschau", 1)[1].split("Uhr", 1)[0].strip()
             content = page.body.find('div', attrs={'class' : 'inhalt'})
-            saveShow("ts20", dateString, content, directory, i, db)
+            saveShow("ts20", dateString, content, directory, i, db, checkFile)
             last['ts'] = i
     #Get Tagesthemen
     for i in range(last['tt']+2, last['tt']+20, 2):
@@ -128,7 +137,7 @@ def getShows(directory, last, db):
         title = page.title.text
         dateString = title.split("tagesthemen", 1)[1].split("Uhr", 1)[0].strip()
         content = page.body.find('div', attrs={'class' : 'inhalt'})
-        saveShow("tt", dateString, content, directory, i, db)
+        saveShow("tt", dateString, content, directory, i, db, checkFile)
         last['tt'] = i
     #Get Nachtmagazin
     for i in range(last['nm']+2, last['nm']+8, 2):
@@ -140,12 +149,12 @@ def getShows(directory, last, db):
         title = page.title.text
         dateString = title.split("nachtmagazin", 1)[1].split("Uhr", 1)[0].strip()
         content = page.body.find('div', attrs={'class' : 'inhalt'})
-        saveShow("nm", dateString, content, directory, i, db)
+        saveShow("nm", dateString, content, directory, i, db, checkFile)
         last['nm'] = i
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
-def saveShow(show, dateString, desc, directory, articleID, db):
+def saveShow(show, dateString, desc, directory, articleID, db, checkFile):
     '''Download an episode of a show, parse the metadata and save them to the database
 
     :param show: identifier of the show (e.g. 'ts20' for main tagesschau)
@@ -158,6 +167,8 @@ def saveShow(show, dateString, desc, directory, articleID, db):
     :type articleID: integer
     :param db: Connection to the metadata database
     :type db: sqlite3.Cursor
+    :param checkFile: Whether to perform an integrity check on the file
+    :type checkFile: boolean
     '''
     #Convert date
     [date, timestamp, localtime, metadate] = convertDate(dateString)
@@ -215,6 +226,20 @@ def saveShow(show, dateString, desc, directory, articleID, db):
     #Add meta data
     if os.path.isfile(videoFile):
         writeMetadata(info, videoFile, subtitles)
+    #Check file integrity
+    if checkFile:
+        cmd = ["ffmpeg", "-v", "error", "-i", videoFile, "-f", "null", "-"]
+        out, _ = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).communicate()
+        if out:
+            print("ERROR: File \"{}\" corrupt!".format(videoFile))
+        else:
+            print("File \"{}\" check passed".format(videoFile))
+    #Calculate checksum
+    sha256 = hashlib.sha256()
+    with open(videoFile, "rb") as vf:
+        for chunk in iter(lambda: vf.read(4096), b""):
+            sha256.update(chunk)
+    info["checksum"] = sha256.hexdigest()
     #Write info
     saveToDB(db, info, rawSubs, transcript, subtitles)
 # ########################################################################### #
@@ -314,7 +339,7 @@ def saveToDB(db, info, raw, trans, srt):
         else:
             subID = None
         #Insert video info
-        insert = "INSERT INTO videos(datetime, showID, presenterID, subtitleID, topics, note, timstamp, name, articleID, videoID) VALUES(?,?,?,?,?,?,?,?,?,?)"
+        insert = "INSERT INTO videos(datetime, showID, presenterID, subtitleID, topics, note, timstamp, name, articleID, videoID, checksum) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
         if "note" in info and info["note"]:
             note = info["note"]
         else:
@@ -323,7 +348,7 @@ def saveToDB(db, info, raw, trans, srt):
             topics = info["topics"]
         else:
             topics = None
-        db.execute(insert, (info["localtime"], showID, presenterID, subID, topics, note, info["timestamp"], info["videoName"], info["articleID"], info["videoID"]))
+        db.execute(insert, (info["localtime"], showID, presenterID, subID, topics, note, info["timestamp"], info["videoName"], info["articleID"], info["videoID"], info["checksum"]))
     except sqlite3.Error as e:
         print(e)
 # ########################################################################### #
@@ -532,7 +557,8 @@ def createDB(path):
                        timstamp INTEGER NOT NULL,
                        name TEXT NOT NULL,
                        articleID INTEGER NOT NULL,
-                       videoID TEXT NOT NULL
+                       videoID TEXT NOT NULL,
+                       checksum TEXT NOT NULL
                    ); """
     subtitleCmd = """ CREATE TABLE IF NOT EXISTS subtitles (
                           id INTEGER PRIMARY KEY AUTOINCREMENT UNIQUE NOT NULL,
