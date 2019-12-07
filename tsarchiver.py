@@ -216,6 +216,12 @@ def saveShow(show, dateString, desc, directory, articleID, db, checkFile):
     #Save video
     info["videoName"] = "{}_{}.mp4".format(show, date)
     videoFile = os.path.join(directory, info["videoName"])
+    i = 1
+    #Check if file already exists
+    while os.path.isfile(videoFile):
+        i += 1
+        info["videoName"] = "{}_{}_{}.mp4".format(show, date, i)
+        videoFile = os.path.join(directory, info["videoName"])
     with requests.get(videoURL, stream=True) as r:
         r.raise_for_status()
         with open(videoFile, 'wb') as f:
