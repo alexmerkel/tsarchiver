@@ -135,7 +135,10 @@ def getShows(directory, last, db, checkFile):
             continue
         page = BeautifulSoup(r.text, features="html.parser")
         title = page.title.text
-        dateString = title.split("tagesthemen", 1)[1].split("Uhr", 1)[0].strip()
+        if "extra" in title:
+            dateString = title.split("extra", 1)[1].split("Uhr", 1)[0].strip()
+        else:
+            dateString = title.split("tagesthemen", 1)[1].split("Uhr", 1)[0].strip()
         content = page.body.find('div', attrs={'class' : 'inhalt'})
         saveShow("tt", dateString, content, directory, i, db, checkFile)
         last['tt'] = i
