@@ -221,7 +221,7 @@ def saveShow(show, dateString, desc, directory, articleID, db, checkFile):
     videoFile = os.path.join(directory, info["videoName"])
     i = 1
     #Check if file already exists
-    while os.path.isfile(videoFile):
+    while checkFilename(info["videoName"], db):
         i += 1
         info["videoName"] = "{}_{}_{}.mp4".format(show, date, i)
         videoFile = os.path.join(directory, info["videoName"])
@@ -455,6 +455,25 @@ def convertDate(dateString):
     metadate = timezoneDate.strftime('%Y:%m:%d %H:%M:00 %z')
     metadate = metadate[:-2] + ':' + metadate[-2:]
     return [date, timestamp, localtime, metadate]
+# ########################################################################### #
+
+# --------------------------------------------------------------------------- #
+def checkFilename(name, db):
+    '''Check if the given filename is already in the database
+
+    :param name: The filename to check
+    :type directory: string
+    :param db: Connection to the metadata database
+    :type db: sqlite3.Cursor
+
+    :returns: True if filename in database, else False
+    :rtype: boolean
+    '''
+    cmd = "SELECT id FROM videos WHERE name = ?;"
+    print("Checking "+name)
+    r = db.execute(cmd, (name,)).fetchone()
+    print("Result: " + str(bool(r)))
+    return bool(r)
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
