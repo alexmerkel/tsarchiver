@@ -470,9 +470,7 @@ def checkFilename(name, db):
     :rtype: boolean
     '''
     cmd = "SELECT id FROM videos WHERE name = ?;"
-    print("Checking "+name)
     r = db.execute(cmd, (name,)).fetchone()
-    print("Result: " + str(bool(r)))
     return bool(r)
 # ########################################################################### #
 
