@@ -208,10 +208,13 @@ def saveShow(show, dateString, desc, directory, articleID, db, checkFile):
     try:
         subtitleURL = "https://www.tagesschau.de" + media["_subtitleUrl"]
         r = requests.get(subtitleURL)
+        r.raise_for_status()
         rawSubs = r.text
         [subtitles, transcript] = subconvert.convertEBU(rawSubs)
         #Extract presenter
         info["presenter"] = subtitles[:3000].split("Studio:", 1)[1].split('<', 1)[0].strip()
+    except requests.exceptions.HTTPError:
+        pass
     except KeyError:
         pass
     except IndexError:
