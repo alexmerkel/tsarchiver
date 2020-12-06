@@ -42,17 +42,16 @@ def archive(argv):
             dbCon = connectDB(dbFile)
             print("Verifying database")
             if not checkDB(dbCon):
-                print("Database integrity error!")
-                return
+                sys.exit("ERROR: Database integrity error")
             print("Backing up database")
             if not backupDB(dbCon, directory):
-                print("Backup failed!")
-                return
+                sys.exit("ERROR: Database backup failed")
+            closeDB(dbCon)
+            dbCon = connectDB(dbFile)
             db = dbCon.cursor()
             last = getLast(db)
         except sqlite3.Error as e:
-            print(e)
-            return
+            sys.exit("ERROR: db error \"{}\"".format(e))
     else:
         #No database found, ask to create one
         while True:
@@ -71,8 +70,7 @@ def archive(argv):
             dbCon = createDB(dbFile)
             db = dbCon.cursor()
         except sqlite3.Error as e:
-            print(e)
-            return
+            sys.exit("ERROR: db error \"{}\"".format(e))
         #Ask for page start indexes
         last = {}
         while True:
