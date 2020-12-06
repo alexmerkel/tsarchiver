@@ -336,11 +336,17 @@ def saveToDB(db, info, raw, trans, srt):
     try:
         #Check/insert show
         showID = idOrInsert(db, "shows", "name", info["show"])
+    except sqlite3.Error as e:
+        sys.exit("ERROR: db error while inserting show \"{}\"".format(e))
+    try:
         if "presenter" in info and info["presenter"]:
             #Check/insert presenter
             presenterID = idOrInsert(db, "presenters", "name", info["presenter"])
         else:
             presenterID = None
+    except sqlite3.Error as e:
+        sys.exit("ERROR: db error while inserting presenter \"{}\"".format(e))
+    try:
         if raw:
             #Insert subtitles
             insert = "INSERT INTO subtitles(raw, transcript, srt) VALUES(?,?,?)"
@@ -348,6 +354,9 @@ def saveToDB(db, info, raw, trans, srt):
             subID = db.lastrowid
         else:
             subID = None
+    except sqlite3.Error as e:
+        sys.exit("ERROR: db error while inserting subtitles \"{}\"".format(e))
+    try:
         #Insert video info
         insert = "INSERT INTO videos(datetime, showID, presenterID, subtitleID, topics, note, timstamp, name, articleID, videoID, checksum) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
         if "note" in info and info["note"]:
@@ -360,7 +369,7 @@ def saveToDB(db, info, raw, trans, srt):
             topics = None
         db.execute(insert, (info["localtime"], showID, presenterID, subID, topics, note, info["timestamp"], info["videoName"], info["articleID"], info["videoID"], info["checksum"]))
     except sqlite3.Error as e:
-        sys.exit("ERROR: db error \"{}\"".format(e))
+        sys.exit("ERROR: db error while inserting video \"{}\"".format(e))
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
