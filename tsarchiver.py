@@ -362,7 +362,7 @@ def saveToDB(db, info, raw, trans, srt):
             topics = None
         db.execute(insert, (info["localtime"], showID, presenterID, subID, topics, note, info["timestamp"], info["videoName"], info["articleID"], info["videoID"], info["checksum"]))
     except sqlite3.Error as e:
-        print(e)
+        sys.exit("ERROR: db error \"{}\"".format(e))
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
