@@ -17,7 +17,7 @@ def parseEBU(subtitles):
     '''
     colors = {}
     subs = []
-    ebutt = BeautifulSoup(subtitles, "xml")
+    ebutt = BeautifulSoup(subtitles, "html.parser")
     #Get colors
     for style in ebutt.find("tt:styling").find_all("tt:style"):
         if "tts:color" in style.attrs:
@@ -38,10 +38,10 @@ def parseEBU(subtitles):
         lines = []
         for item in items:
             #span element: text
-            if item.name == "span":
+            if "span" in item.name:
                 lines.append({"color" : colors[item.attrs["style"]], "text" : item.text})
             #br: insert line break
-            elif item.name == "br":
+            elif "br" in item.name:
                 lines.append({"text" : "\n"})
         if lines:
             sub["lines"] = lines
