@@ -5,6 +5,7 @@ import os
 import sys
 import json
 import time
+import re
 from zipfile import ZipFile, ZIP_DEFLATED
 from datetime import datetime
 import subprocess
@@ -121,9 +122,10 @@ def getShows(directory, last, db, checkFile):
         page = BeautifulSoup(r.text, features="html.parser")
         title = page.title.text
         if "20:00" in title:
-            dateString = title.split("tagesschau", 1)[1].split("Uhr", 1)[0].strip()
+            desc, config = extractDescConfig(page)
+            dateString = extractDate(title)
             content = page.body.find('div', attrs={'class' : 'inhalt'})
-            saveShow("ts20", dateString, content, directory, i, db, checkFile)
+            saveShow("ts20", dateString, desc, config, directory, i, db, checkFile)
             last['ts'] = i
     #Get Tagesthemen
     for i in range(last['tt']+2, last['tt']+20, 2):
@@ -133,12 +135,9 @@ def getShows(directory, last, db, checkFile):
             continue
         page = BeautifulSoup(r.text, features="html.parser")
         title = page.title.text
-        if "extra" in title:
-            dateString = title.split("extra", 1)[1].split("Uhr", 1)[0].strip()
-        else:
-            dateString = title.split("tagesthemen", 1)[1].split("Uhr", 1)[0].strip()
-        content = page.body.find('div', attrs={'class' : 'inhalt'})
-        saveShow("tt", dateString, content, directory, i, db, checkFile)
+        desc, config = extractDescConfig(page)
+        dateString = extractDate(title)
+        saveShow("tt", dateString, desc, config, directory, i, db, checkFile)
         last['tt'] = i
     #Get Nachtmagazin
     for i in range(last['nm']+2, last['nm']+8, 2):
@@ -148,14 +147,14 @@ def getShows(directory, last, db, checkFile):
             continue
         page = BeautifulSoup(r.text, features="html.parser")
         title = page.title.text
-        dateString = title.split("nachtmagazin", 1)[1].split("Uhr", 1)[0].strip()
-        content = page.body.find('div', attrs={'class' : 'inhalt'})
-        saveShow("nm", dateString, content, directory, i, db, checkFile)
+        desc, config = extractDescConfig(page)
+        dateString = extractDate(title)
+        saveShow("nm", dateString, desc, config, directory, i, db, checkFile)
         last['nm'] = i
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
-def saveShow(show, dateString, desc, directory, articleID, db, checkFile):
+def saveShow(show, dateString, desc, config, directory, articleID, db, checkFile):
     '''Download an episode of a show, parse the metadata and save them to the database
 
     :param show: identifier of the show (e.g. 'ts20' for main tagesschau)
@@ -164,6 +163,8 @@ def saveShow(show, dateString, desc, directory, articleID, db, checkFile):
     :type dateString: string
     :param desc: Episode description
     :type desc: string
+    :param config: Parsed episode config json
+    :type config: dict
     :param articleID: Page ID of the episode
     :type articleID: integer
     :param db: Connection to the metadata database
@@ -182,35 +183,27 @@ def saveShow(show, dateString, desc, directory, articleID, db, checkFile):
     info["localtime"] = localtime
     info["metadate"] = metadate
     info["articleID"] = articleID
-    #Extract topics
-    teaser = desc.find_all('p', attrs={'class' : 'teasertext'})
-    info["topics"] = teaser[0].text.split(':', 1)[1].strip()
+    info["topics"] = desc
     #Extract notes
-    if "Hinweis" in teaser[1].text:
-        info["note"] = teaser[1].text.split(':', 1)[1].strip()
-    #Extract video id
-    attrs = desc.find('form').attrs
-    for attr in attrs:
-        if "id" in attr:
-            info["videoID"] = attrs[attr].split(':', 1)[1].split('}', 1)[0][1:-1]
-            break
-    #Get show json
-    url = "https://www.tagesschau.de/multimedia/video/{}~mediajson.json".format(info["videoID"])
-    r = requests.get(url)
-    media = json.loads(r.text)
-    videoURL = media["_mediaArray"][0]["_mediaStreamArray"][-1]["_stream"]
+    if "Hinweis:" in desc:
+        info["note"] = desc.split(':', 1)[1].strip()
+    #Get video id
+    info["videoID"] = config["pc"]["_pixelConfig"][0]["playerID"]
+    #Get video url
+    videoURL = config["mc"]["_mediaArray"][0]["_mediaStreamArray"][-1]["_stream"]
     #Get subtitles
     rawSubs = ""
     subtitles = ""
     transcript = ""
     try:
-        subtitleURL = "https://www.tagesschau.de" + media["_subtitleUrl"]
+        subtitleURL = config["mc"]["_subtitleUrl"]
         r = requests.get(subtitleURL)
         r.raise_for_status()
         rawSubs = r.text
         [subtitles, transcript] = subconvert.convertEBU(rawSubs)
         #Extract presenter
         info["presenter"] = subtitles[:3000].split("Studio:", 1)[1].split('<', 1)[0].strip()
+        info["presenter"] = info["presenter"].replace('.', '')
     except requests.exceptions.HTTPError:
         pass
     except KeyError:
@@ -444,6 +437,46 @@ def getLast(db):
         last["nm"] = r[0]
 
     return last
+# ########################################################################### #
+
+# --------------------------------------------------------------------------- #
+def extractDescConfig(page):
+    '''Extract the description and the config json from the page
+
+    :param page: The web page
+    :type page: bs4.BeautifulSoup
+
+    :return: The description and the parsed config json
+    :rtype: string, dict
+    '''
+    #Extract description
+    desc = page.body.find("div", attrs={"class" : "copytext__video__details"}).find('p').text.strip()
+    #Extract config
+    config = page.body.find("div", attrs={"class" : "ts-mediaplayer"})["data-config"]
+    config = json.loads(config)
+    return desc, config
+# ########################################################################### #
+
+# --------------------------------------------------------------------------- #
+def extractDate(title):
+    '''Extract data from the title string using regex
+
+    :param title: The website title containing the time and date
+    :type title: string
+
+    :return: Date and time in the form DD.MM.YYYY HH:MM
+    :rtype: string
+    '''
+    #Extract date and time
+    d = re.search(r"\d{2}\.\d{2}\.\d{4}", title)
+    t = re.search(r"\d{2}:\d{2}", title)
+    #If successful return
+    try:
+        return "{} {}".format(d.group(0), t.group(0))
+    except IndexError:
+        pass
+    #Else raise error
+    raise Exception("Unable to extract date and time from \"{}\"".format(title))
 # ########################################################################### #
 
 # --------------------------------------------------------------------------- #
