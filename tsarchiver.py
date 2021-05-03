@@ -191,12 +191,16 @@ def saveShow(show, dateString, desc, config, directory, articleID, db, checkFile
     info["videoID"] = config["pc"]["_pixelConfig"][0]["playerID"]
     #Get video url
     videoURL = config["mc"]["_mediaArray"][0]["_mediaStreamArray"][-1]["_stream"]
+    if not videoURL.startswith("http"):
+        videoURL = "https://www.tagesschau.de" + videoURL
     #Get subtitles
     rawSubs = ""
     subtitles = ""
     transcript = ""
     try:
         subtitleURL = config["mc"]["_subtitleUrl"]
+        if not subtitleURL.startswith("http"):
+            subtitleURL = "https://www.tagesschau.de" + subtitleURL
         r = requests.get(subtitleURL)
         r.raise_for_status()
         rawSubs = r.text
